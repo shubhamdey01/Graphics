@@ -2,12 +2,7 @@
 
 #include <GL/glut.h>
 #include <stdio.h>
-
-#define N 4
-#define XMIN -100
-#define YMIN -100
-#define XMAX 100
-#define YMAX 100
+#include <stdlib.h>
 
 typedef struct {
     float x, y;
@@ -15,17 +10,36 @@ typedef struct {
 
 void myInit(void);
 void display(void);
-void draw(Point, Point);
+void draw(float, float, Point);
 void myKey(unsigned char,int,int);
-void cyrusBeck(Point, Point);
+void cyrusBeck(Point, Point, Point*, Point*, int);
 
 Point p1, p2;
-Point ver[N] = {{-100,-100},{100,-100},{100,100},{-100,100}};
+Point *n, *W;
 
-int flag;
+int flag, N;
 
 int main(int argc, char** argv) {
-    printf("Enter coordinates of the point1 :\n");
+    int i;
+    printf("Enter no. of vertices of the clipping window : \t");
+    scanf("%d", &N);
+
+    W = (Point*)calloc(N, sizeof(Point));
+    n = (Point*)calloc(N, sizeof(Point));
+
+    printf("Enter the vertices in clockwise direction :\n");
+    for(i=0; i<N; i++) {
+        printf("V%d :\t", i+1);
+        scanf("%f %f", &W[i].x, &W[i].y);
+    }
+
+    for(i=0; i<N; i++) {
+        n[i] = (Point){W[(i+1)%N].y-W[i].y, -(W[(i+1)%N].x-W[i].x)};
+        // f[i] = 
+    }
+
+
+    printf("\nEnter coordinates of the point1 :\n");
     scanf("%f %f", &p1.x, &p1.y);
     printf("\nEnter coordinates of the point2 :\n");
     scanf("%f %f", &p2.x, &p2.y);
@@ -47,7 +61,8 @@ int main(int argc, char** argv) {
 
 void myInit() {
     glClearColor(0.0,0.0,0.0,0.0);
-    glMatrixMode(GL_PROJECTION);
+    glMatrixMode(GL_PROJECTION);                              
+    glLineWidth(2.0); 
     glLoadIdentity();
     gluOrtho2D(-540.0, 540.0, -360.0, 360.0);
 }
@@ -59,7 +74,7 @@ void display() {
     glColor3f(0,1,0);
     glBegin(GL_LINE_LOOP);
     for(int i=0; i<N; i++)
-        glVertex2i(ver[i].x, ver[i].y);
+        glVertex2i(W[i].x, W[i].y);
     glEnd();
     glFlush();
 
@@ -74,21 +89,19 @@ void display() {
     }
 }
 
-void draw(Point p1, Point p2) {
-    glPointSize(2.0);
-    glColor3f(1,0,0);
-    glBegin(GL_LINES);
-    glVertex2f(p1.x, p1.y);
-    glVertex2f(p2.x, p2.y);
-    glEnd();
-    glFlush();
+void draw(float tl, float tu, Point D) {
+    Point a, b;
+    a = (Point){p1.x + D.x*tl, p1.y + D.y*tl};
+    b = (Point){p1.x + D.x*tu, p1.y + D.y*tu};
+
+    p1 = a; p2 = b;
 }
 
 void myKey(unsigned char key,int x,int y) {
     if(key=='c') {
         flag = 0;
         display();
-        cyrusBeck(p1, p2);
+        cyrusBeck(p1, p2, n, W, N);
         glFlush();
     }
 }
@@ -102,70 +115,37 @@ Point sub(Point a, Point b) {
     return c;
 }
 
-Point add(Point a, Point b) {
-    Point c = {a.x + b.x, a.y + b.y};
-    return c;
-}
+void cyrusBeck(Point p1, Point p2, Point *n, Point *f, int k) {
+    Point D, w;
+    float tl = 0, tu = 1, t, num, deno;
+    D = sub(p2, p1);
+    for(int i=0; i<k; i++) {
+        w = sub(p1, f[i]);
+        num = dot(w, n[i]);
+        deno = dot(D, n[i]);
 
-Point scale(float c, Point a)
-{
-    Point b = {c * a.x, c * a.y};
-    return b;
-}
-
-void cyrusBeck(Point p1, Point p2) {
-    Point D = sub(p2, p1);
-    Point p, n;
-    float t0 = 0, t1 = 1;
-    float num, deno;
-
-    for (int i = 0; i < 4; i++)
-    {
-        switch (i)
-        {
-        case 0:
-            n = (Point){-1, 0};
-            p = (Point){XMIN, YMIN};
-            break;
-        case 1:
-            n = (Point){1, 0};
-            p = (Point){XMAX, YMIN};
-            break;
-        case 2:
-            n = (Point){0, -1};
-            p = (Point){XMIN, YMIN};
-            break;
-        case 3:
-            n = (Point){0, 1};
-            p = (Point){XMIN, YMAX};
-            break;
-        }
-
-        num = dot(sub(p, p1), n);
-        deno = dot(D, n);
-
-        if (deno == 0) {
-            if (num < 0)
-                return;
-        }
-        else {
-            float t = num / deno;
-            if (deno < 0) {
-                if (t > t1)
-                    return;
-                else if (t > t0)
-                    t0 = t;
+        if(deno != 0) {
+            t = -num/deno;
+            if(deno > 0) {
+                if(t > 1)
+                    flag = 0;
+                else
+                    tl = (t > tl) ? t : tl;
             }
             else {
-                if (t < t0)
-                    return;
-                else if (t < t1)
-                    t1 = t;
+                if(t < 0)
+                    flag = 0;
+                else
+                    tu = (t < tu) ? t : tu;
             }
         }
+        else {
+            if(num < 0)
+                flag = 0;
+        }
     }
-
-    Point c1 = add(p1, scale(t0, D));
-    Point c2 = add(p1, scale(t1, D));
-    draw(c1, c2);
+    if(tl <= tu)
+        flag = 1;
+    draw(tl, tu, D);
+    display();
 }
